@@ -1,4 +1,4 @@
-import { useState } from 'react'; 
+import { useState, useEffect } from 'react'; 
 import {
   View, Text, TextInput, FlatList, Pressable,
   KeyboardAvoidingView, Platform, StyleSheet,
@@ -12,6 +12,13 @@ export default function App(){
   const [messages, setMessages] = useState<Msg[]>([]); 
   const [input, setInput] = useState(""); 
   const [loading, setLoading] = useState(false); 
+
+  useEffect(() => {
+    fetch(`${API_URL}/history`)
+      .then((r) => r.json()) // get the chat history 
+      .then((d) => setMessages(d.messages ?? [])) // render it through setMessages
+      .catch(() => {}); // error safety net
+  }, []); 
 
   async function send() {
     const text = input.trim(); 

@@ -12,6 +12,7 @@
   "type": "module",
   "dependencies": {
     "@hono/node-server": "^2.0.4",
+    "@supabase/supabase-js": "^2.106.2",
     "dotenv": "^17.4.2",
     "hono": "^4.12.23"
   },
