@@ -22,5 +22,5 @@ export async function callLLM(system: string, messages: Msg[]): Promise<string>{
     }
 
     const data = await res.json(); 
-    return data.choices[0].messages.content as string; 
+    return data.choices[0].message.content as string; 
 }
