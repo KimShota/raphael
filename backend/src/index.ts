@@ -2,10 +2,12 @@ import "dotenv/config";
 import { Hono } from "hono"; 
 import { cors } from "hono/cors";
 import { serve } from "@hono/node-server";
-import { callLLM, summarizeForMemory, generateFeedback } from "./llm.js";
+import { callLLM, summarizeForMemory, generateFeedback, transcribeAudio } from "./llm.js";
 import { THEO_SYSTEM_PROMPT } from "./theo-prompt.js";
 import {
-  supabase, DEV_USER_ID, getOrCreateSession, loadMemory, saveMemory, getTodaysPhrases, updateUserPhrases, getDuePhrases, getUserPhrases
+  supabase, DEV_USER_ID, getOrCreateSession, loadMemory, saveMemory, 
+  getTodaysPhrases, updateUserPhrases, getDuePhrases, getUserPhrases, 
+  getUser, createUser
 } from "./db.js";
 
 // create an object of Hono
@@ -23,10 +25,16 @@ function buildTheoSystem(o: { memory: string; level: string; phrases: string[] }
     .replace("{{MEMORY}}", o.memory || "(nothing yet — this is one of your first chats with them)");
 }
 
+// function to get the userId
+function getUserId(c: any): string{
+    return c.req.query("userId") || DEV_USER_ID;
+}
+
 // endpoint to show the past chats to the user in order
 app.get("/history", async (c) => {
     try {
-        const sessionId = await getOrCreateSession(DEV_USER_ID);
+        const userId = c.req.query("userId") || DEV_USER_ID;
+        const sessionId = await getOrCreateSession(userId);
         // get the history chat through session id 
         const { data, error } = await supabase
             .from("messages")
@@ -44,14 +52,15 @@ app.get("/history", async (c) => {
 // endpoint to start the conversation
 app.get("/greeting", async (c) => {
     try {
-        const sessionId = await getOrCreateSession(DEV_USER_ID);
+        const userId = c.req.query("userId") || DEV_USER_ID;
+        const sessionId = await getOrCreateSession(userId);
         const { data: msgs } = await supabase
             .from("messages").select("id").eq("session_id", sessionId).limit(1);
         
         if (msgs && msgs.length > 0) return c.json({ reply: null });
 
         // load memory
-        const memory = await loadMemory(DEV_USER_ID);
+        const memory = await loadMemory(userId);
         
         // create opening prompt
         const system = buildTheoSystem({ memory, level: "LOWER-INTERMEDIATE", phrases: [] }) +
@@ -81,18 +90,27 @@ app.get("/todays-phrases", async (c) => {
 
 // endpoint to get user's phrases
 app.get("/my-phrases", async (c) => {
-    const data = await getUserPhrases(DEV_USER_ID);
+    const userId = c.req.query("userId") || DEV_USER_ID;
+    const data = await getUserPhrases(userId);
     return c.json({ phrases: data }); 
 }); 
 
-// POST request to send prompt to LLM prov
-app.post("/chat", async (c) => {
-    const { messages, level } = await c.req.json();
+// endpoint to send prompt to LLM prov
+app.post("/voice", async (c) => {
+    const { audio, mimeType, messages, level, userId: uid } = await c.req.json();
+    const userId = uid || DEV_USER_ID;
     try {
+        // get transcript by transcribing audio file in mp4
+        const transcript = await transcribeAudio(audio, mimeType || "audio/mp4"); 
+        // error handling 
+        if (!transcript) {
+            return c.json({ error: "empty transcript" }, 400);
+        }
+
         // load memory 
-        const memory = await loadMemory(DEV_USER_ID);
+        const memory = await loadMemory(userId);
         const todays = await getTodaysPhrases(); 
-        const due = await getDuePhrases(DEV_USER_ID); 
+        const due = await getDuePhrases(userId); 
         const allPhrases = [...new Set([...todays.map((p: any) => p.text), ...due])];
         // build the prompt 
         const system = buildTheoSystem({ 
@@ -101,35 +119,37 @@ app.post("/chat", async (c) => {
             phrases: allPhrases, 
         });
         // get the session id 
-        const sessionId = await getOrCreateSession(DEV_USER_ID);
+        const sessionId = await getOrCreateSession(userId);
         // get the latest user message
-        const userMsg = messages[messages.length - 1];
+        const fullMessages = [...(messages ?? []), { role: "user", content: transcript }];
         // store user input into db
         await supabase.from("messages").insert({ 
             session_id: sessionId, 
-            role: userMsg.role, 
-            content: userMsg.content 
+            role: "user", 
+            content: transcript 
         });
         // get reply 
-        const reply = await callLLM(system, messages);
+        const reply = await callLLM(system, fullMessages);
         // store AI reply
         await supabase.from("messages").insert({ 
             session_id: sessionId, 
             role: "assistant", 
             content: reply 
         });
-        return c.json({ reply });
+        return c.json({ transcript, reply });
     } catch (error) { 
         console.error(error); 
         return c.json({ error: "LLM failed" }, 500); 
     }
 });
 
-// endpoint to 
+// endpoint to end the session
 app.post("/end-session", async (c) => {
     try {
+        const { userId: uid } = await c.req.json();
+        const userId = uid || DEV_USER_ID;
         // get the session id 
-        const sessionId = await getOrCreateSession(DEV_USER_ID);
+        const sessionId = await getOrCreateSession(userId);
         // 
         const { data: msgs } = await supabase
             .from("messages")
@@ -139,9 +159,9 @@ app.post("/end-session", async (c) => {
         
         // get the summary and update memory
         if (msgs && msgs.length > 0) {
-            const existing = await loadMemory(DEV_USER_ID);
+            const existing = await loadMemory(userId);
             const updated = await summarizeForMemory(existing, msgs as any);
-            await saveMemory(DEV_USER_ID, updated);
+            await saveMemory(userId, updated);
         }
         // record when the chat ended
         await supabase
@@ -156,9 +176,12 @@ app.post("/end-session", async (c) => {
     }
 });
 
+// endpoint to get review
 app.post("/review", async (c) => {
     try {
-        const sessionId = await getOrCreateSession(DEV_USER_ID); 
+        const { userId: uid } = await c.req.json();
+        const userId = uid || DEV_USER_ID;
+        const sessionId = await getOrCreateSession(userId); 
         const { data: cached } = await supabase
             .from("feedback")
             .select("*")
@@ -197,7 +220,7 @@ app.post("/review", async (c) => {
             .single();
 
         // update user phrases 
-        await updateUserPhrases(DEV_USER_ID, result.phrases_used, result.phrases_missed); 
+        await updateUserPhrases(userId, result.phrases_used, result.phrases_missed); 
         
         return c.json({ feedback: saved }); 
 
@@ -205,6 +228,20 @@ app.post("/review", async (c) => {
         console.error(error); 
         return c.json({ error: "review failed" }, 500); 
     }
+}); 
+
+// endpoint to get user 
+app.get("/user", async (c) => {
+    const userId = c.req.query("userId") || DEV_USER_ID;
+    const user = await getUser(userId); 
+    return c.json({ user });
+}); 
+
+// endpoint to create user with necessary info 
+app.post("/onboard", async (c) => {
+    const { userId, buddyName, level, interests } = await c.req.json();
+    await createUser(userId, buddyName, level, interests);
+    return c.json({ ok: true });
 }); 
 
 const port = Number(process.env.PORT || 3000); 

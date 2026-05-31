@@ -77,3 +77,30 @@ export async function generateFeedback(
         return { corrections: [], rephrasings: [], phrases_used: [], phrases_missed: todaysPhrases };
     }
 }
+
+// function to transcribe audio
+export async function transcribeAudio(base64Audio: string, mimeType: string): Promise<string> {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${process.env.LLM_MODEL}:generateContent`;
+    // transcribe user input using LLM
+    const res = await fetch(url, {
+        method: "POST", 
+        headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": process.env.LLM_API_KEY!,
+        }, 
+        body: JSON.stringify({
+            contents: [{
+                parts: [
+                    { text: "Transcribe this audio exactly into English text. Output ONLY the transcript, nothing else." },
+                    { inline_data: { mime_type: mimeType, data: base64Audio } },
+                ],
+            }],
+        }),
+    }); 
+    if (!res.ok){
+        throw new Error(`STT error ${res.status}: ${await res.text()}`); 
+    }
+    const data = await res.json(); 
+    // return transcribed text
+    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
+}

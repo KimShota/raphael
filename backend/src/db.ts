@@ -188,3 +188,21 @@ export async function getUserPhrases(userId: string){
         return { ...up, text: p?.text, meaning: p?.meaning };
     });
 }
+
+// function to get the user 
+export async function getUser(userId: string){
+    const { data } = await supabase
+        .from("users")
+        .select("*")
+        .eq("id", userId)
+        .maybeSingle();
+    
+    return data;
+}
+
+// function to create a new user 
+export async function createUser(userId: string, buddyName: string, level: string, interests: string[]){
+    await supabase
+        .from("users")
+        .upsert({ id: userId, buddy_name: buddyName, level, interests });
+}
