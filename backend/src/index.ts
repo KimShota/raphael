@@ -5,7 +5,7 @@ import { serve } from "@hono/node-server";
 import { callLLM, summarizeForMemory, generateFeedback } from "./llm.js";
 import { THEO_SYSTEM_PROMPT } from "./theo-prompt.js";
 import {
-  supabase, DEV_USER_ID, getOrCreateSession, loadMemory, saveMemory, getTodaysPhrases
+  supabase, DEV_USER_ID, getOrCreateSession, loadMemory, saveMemory, getTodaysPhrases, updateUserPhrases, getDuePhrases, getUserPhrases
 } from "./db.js";
 
 // create an object of Hono
@@ -79,6 +79,12 @@ app.get("/todays-phrases", async (c) => {
     return c.json({ phrases }); 
 }); 
 
+// endpoint to get user's phrases
+app.get("/my-phrases", async (c) => {
+    const data = await getUserPhrases(DEV_USER_ID);
+    return c.json({ phrases: data }); 
+}); 
+
 // POST request to send prompt to LLM prov
 app.post("/chat", async (c) => {
     const { messages, level } = await c.req.json();
@@ -86,12 +92,13 @@ app.post("/chat", async (c) => {
         // load memory 
         const memory = await loadMemory(DEV_USER_ID);
         const todays = await getTodaysPhrases(); 
-        const phraseTexts = todays.map((p: any) => p.text); 
+        const due = await getDuePhrases(DEV_USER_ID); 
+        const allPhrases = [...new Set([...todays.map((p: any) => p.text), ...due])];
         // build the prompt 
         const system = buildTheoSystem({ 
             memory, 
             level: level ?? "LOWER-INTERMEDIATE", 
-            phrases: phraseTexts, 
+            phrases: allPhrases, 
         });
         // get the session id 
         const sessionId = await getOrCreateSession(DEV_USER_ID);
@@ -188,6 +195,9 @@ app.post("/review", async (c) => {
             })
             .select()
             .single();
+
+        // update user phrases 
+        await updateUserPhrases(DEV_USER_ID, result.phrases_used, result.phrases_missed); 
         
         return c.json({ feedback: saved }); 
 

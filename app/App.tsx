@@ -6,7 +6,7 @@ import {
 import { AppState } from "react-native"; 
 import { Modal, ScrollView, TouchableOpacity, ActivityIndicator } from "react-native";
 
-const API_URL = "http://172.20.10.13:3000";
+const API_URL = "http://192.168.0.25:3000";
 
 type Msg = { role: "user" | "assistant"; content: string };
 type Phrase = { id: number; text: string; meaning: string; example: string };
@@ -19,6 +19,8 @@ export default function App(){
   const [showReview, setShowReview] = useState(false);
   const [feedback, setFeedback] = useState<any>(null);
   const [loadingReview, setLoadingReview] = useState(false);
+  const [showMyPhrases, setShowMyPhrases] = useState(false);
+  const [myPhrases, setMyPhrases] = useState<any[]>([]);
 
   // display AI buddy's reply 
   useEffect(() => {
@@ -100,6 +102,13 @@ export default function App(){
     }
   }
 
+  // function to fetch users phrases
+  async function fetchMyPhrases(){
+    const d = await fetch(`${API_URL}/my-phrases`).then(r => r.json()); 
+    setMyPhrases(d.phrases ?? []);
+    setShowMyPhrases(true);
+  }
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -134,10 +143,14 @@ export default function App(){
  
       {loading && <Text style={styles.typing}>Theo is typing…</Text>}
  
-      {/* 振り返りボタン */}
-      <TouchableOpacity style={styles.reviewBtn} onPress={fetchReview}>
-        <Text style={styles.reviewBtnText}>振り返り 📝</Text>
-      </TouchableOpacity>
+      <View style={{ flexDirection: "row", borderTopWidth: 1, borderColor: "#eee" }}>
+        <TouchableOpacity style={[styles.reviewBtn, { flex: 1 }]} onPress={fetchReview}>
+          <Text style={styles.reviewBtnText}>振り返り 📝</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.reviewBtn, { flex: 1 }]} onPress={fetchMyPhrases}>
+          <Text style={styles.reviewBtnText}>マイフレーズ 📚</Text>
+        </TouchableOpacity>
+      </View>
  
       {/* 入力欄 */}
       <View style={styles.inputRow}>
@@ -234,6 +247,39 @@ export default function App(){
                 )}
             </>
           )}
+        </ScrollView>
+      </Modal>
+
+      <Modal visible={showMyPhrases} animationType="slide" onRequestClose={() => setShowMyPhrases(false)}>
+        <ScrollView style={styles.modal} contentContainerStyle={{ padding: 20, paddingTop: 60, paddingBottom: 40 }}>
+          <TouchableOpacity onPress={() => setShowMyPhrases(false)}>
+            <Text style={styles.backBtn}>← 戻る</Text>
+          </TouchableOpacity>
+          <Text style={styles.modalTitle}>マイフレーズ</Text>
+
+          {myPhrases.length === 0 && (
+            <Text style={{ color: "#888", marginTop: 20 }}>
+              まだフレーズがありません。振り返りをすると追加されます。
+            </Text>
+          )}
+
+          {myPhrases.map((p, i) => {
+            const icon = p.status === "mastered" ? "⭐" : p.status === "used" ? "💪" : "👀";
+            return (
+              <View key={i} style={styles.corrCard}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Text style={{ fontSize: 20 }}>{icon}</Text>
+                  <View>
+                    <Text style={styles.phraseText}>{p.text}</Text>
+                    <Text style={styles.phraseMeaning}>{p.meaning}</Text>
+                  </View>
+                  <Text style={{ marginLeft: "auto", color: "#888", fontSize: 12 }}>
+                    {p.times_used}回使った
+                  </Text>
+                </View>
+              </View>
+            );
+          })}
         </ScrollView>
       </Modal>
     </KeyboardAvoidingView>
