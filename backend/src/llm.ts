@@ -37,3 +37,43 @@ export async function summarizeForMemory(existing: string, messages: Msg[]): Pro
     const user = `EXISTING MEMORY:\n${existing || "(none)"}\n\nNEW CONVERSATION:\n${convo}\n\nUPDATED MEMORY:`;
     return callLLM(system, [{ role: "user", content: user }]);
 }
+
+// function to generate feedback from LLM
+export async function generateFeedback(
+  transcript: { role: string; content: string }[],
+  todaysPhrases: string[]
+): Promise<{ corrections: any[]; rephrasings: any[]; phrases_used: string[]; phrases_missed: string[] }> {
+    const convo = transcript.map((m) => `${m.role.toUpperCase()}: ${m.content}`).join("\n");
+    
+    const system = `You are a kind English coach reviewing a conversation between a Japanese learner (USER) and their AI friend Theo (ASSISTANT). 
+        Analyze the USER's messages only. Return ONLY a JSON object — no preamble, no markdown backticks:
+        {
+        "corrections": [{"original": "...", "corrected": "...", "tip": "..."}],
+        "rephrasings": [{"original": "...", "casual": "...", "note": "..."}],
+        "phrases_used": ["..."],
+        "phrases_missed": ["..."]
+        }
+        Rules:
+        - corrections: MAX 2-3. Only the most important errors. Kind and brief. Skip tiny mistakes.
+        - rephrasings: 1-3 places where the user sounded textbook/formal. Show the casual, natural alternative. THIS IS THE KEY FEATURE — help them sound like a native.
+        - phrases_used: which of TODAY'S TARGET PHRASES the user actually used.
+        - phrases_missed: which weren't used (they'll come back later).
+        - If no major errors, corrections = [].
+        - Output ONLY the JSON object. Nothing else.`;
+
+        const user = `TODAY'S TARGET PHRASES: ${todaysPhrases.join(", ")}
+
+        CONVERSATION TRANSCRIPT:
+        ${convo}
+
+        Analyze the USER's messages and return the feedback JSON.`;
+    
+    // get response from LLM
+    const raw = await callLLM(system, [{ role: "user", content: user }]); 
+    const clean = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    try {
+        return JSON.parse(clean); 
+    } catch (error){
+        return { corrections: [], rephrasings: [], phrases_used: [], phrases_missed: todaysPhrases };
+    }
+}

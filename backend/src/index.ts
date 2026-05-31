@@ -2,7 +2,7 @@ import "dotenv/config";
 import { Hono } from "hono"; 
 import { cors } from "hono/cors";
 import { serve } from "@hono/node-server";
-import { callLLM, summarizeForMemory } from "./llm.js";
+import { callLLM, summarizeForMemory, generateFeedback } from "./llm.js";
 import { THEO_SYSTEM_PROMPT } from "./theo-prompt.js";
 import {
   supabase, DEV_USER_ID, getOrCreateSession, loadMemory, saveMemory, getTodaysPhrases
@@ -148,6 +148,54 @@ app.post("/end-session", async (c) => {
         return c.json({ error: "end-session failed" }, 500); 
     }
 });
+
+app.post("/review", async (c) => {
+    try {
+        const sessionId = await getOrCreateSession(DEV_USER_ID); 
+        const { data: cached } = await supabase
+            .from("feedback")
+            .select("*")
+            .eq("session_id", sessionId)
+            .maybeSingle();
+
+        // return cache if it exists 
+        if (cached) {
+            return c.json({ feedback: cached });
+        }
+
+        // get messages
+        const { data: msgs } = await supabase
+            .from("messages")
+            .select("role, content")
+            .eq("session_id", sessionId)
+            .order("created_at", { ascending: true });
+        
+        // return null if message does not exist 
+        if (!msgs || msgs.length === 0) return c.json({ feedback: null });
+
+        // get today's phrases 
+        const todays = await getTodaysPhrases(); 
+        const phraseTexts = todays.map((p: any) => p.text);
+
+        // generate feedback with messages and phrases
+        const result = await generateFeedback(msgs as any, phraseTexts); 
+
+        // save the feedback 
+        const { data: saved } = await supabase
+            .from("feedback")
+            .insert({
+                session_id: sessionId, ...result,
+            })
+            .select()
+            .single();
+        
+        return c.json({ feedback: saved }); 
+
+    } catch (error){
+        console.error(error); 
+        return c.json({ error: "review failed" }, 500); 
+    }
+}); 
 
 const port = Number(process.env.PORT || 3000); 
 // tell Node to pass HTTP request to hono routing engine
