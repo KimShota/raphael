@@ -3,21 +3,51 @@ import {
   View, Text, TextInput, FlatList, Pressable,
   KeyboardAvoidingView, Platform, StyleSheet,
 } from "react-native";
+import { AppState } from "react-native"; 
 
-const API_URL = "http://192.168.0.25:3000";
+const API_URL = "http://172.20.10.13:3000";
 
 type Msg = { role: "user" | "assistant"; content: string };
+type Phrase = { text: string, meaning: string, example: string }; 
 
 export default function App(){
   const [messages, setMessages] = useState<Msg[]>([]); 
   const [input, setInput] = useState(""); 
   const [loading, setLoading] = useState(false); 
+  const [phrases, setPhrases] = useState<Phrase[]>([]);
 
+  // display AI buddy's reply 
   useEffect(() => {
-    fetch(`${API_URL}/history`)
-      .then((r) => r.json()) // get the chat history 
-      .then((d) => setMessages(d.messages ?? [])) // render it through setMessages
-      .catch(() => {}); // error safety net
+    (async () => {
+      try {
+        const d = await fetch(`${API_URL}/history`).then((r) => r.json());
+        const msgs = d.messages ?? [];
+        if (msgs.length === 0) {
+          const g = await fetch(`${API_URL}/greeting`).then((r) => r.json());
+          if (g.reply) setMessages([{ role: "assistant", content: g.reply }]);
+        } else {
+          setMessages(msgs);
+        }
+      } catch {}
+    })();
+  }, []);
+
+  // end the session if the app goes into background
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "background") {
+        fetch(`${API_URL}/end-session`, { method: "POST" }).catch(() => {});
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
+  // get today's phrases
+  useEffect(() => {
+    fetch(`${API_URL}/todays-phrases`)
+      .then((r) => r.json()) // get response as json
+      .then((d) => setPhrases(d.phrases ?? [])) // get phrases from json data
+      .catch(() => {});
   }, []); 
 
   async function send() {
@@ -39,7 +69,6 @@ export default function App(){
         body: JSON.stringify({
           messages: next,
           level: "LOWER-INTERMEDIATE",
-          todaysPhrases: ["I'm beat", "no worries", "that's so random"],
         }),
       });
       const data = await res.json(); 
@@ -56,6 +85,18 @@ export default function App(){
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
+      {phrases.length > 0 && (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>今日のフレーズ — 会話で使ってみよう</Text>
+          {phrases.map((p, i) => (
+            <View key={i} style={styles.phraseRow}>
+              <Text style={styles.phraseText}>{p.text}</Text>
+              <Text style={styles.phraseMeaning}>{p.meaning}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
       <FlatList
         contentContainerStyle={{ padding: 12 }}
         data={messages}
@@ -95,4 +136,9 @@ const styles = StyleSheet.create({
   input: { flex: 1, borderWidth: 1, borderColor: "#ccc", borderRadius: 20, paddingHorizontal: 14, height: 44 },
   send: { backgroundColor: "#2563eb", borderRadius: 20, paddingHorizontal: 18, justifyContent: "center" },
   sendText: { color: "#fff", fontWeight: "600" },
+  card: { margin: 12, padding: 14, backgroundColor: "#f5f3ff", borderRadius: 14, borderWidth: 1, borderColor: "#ddd6fe" },
+  cardTitle: { fontWeight: "700", marginBottom: 8, color: "#5b21b6" },
+  phraseRow: { marginBottom: 6 },
+  phraseText: { fontSize: 16, fontWeight: "600", color: "#1e1b4b" },
+  phraseMeaning: { fontSize: 13, color: "#666" },
 }); 
