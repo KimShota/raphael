@@ -8,12 +8,9 @@ import {
 } from "react-native";
 import "react-native-get-random-values";
 import * as Crypto from "expo-crypto";
-import { useAudioRecorder, AudioModule, RecordingPresets } from "expo-audio";
-import * as Speech from "expo-speech";
-import * as FileSystem from "expo-file-system";
-import { File as ExpoFile } from 'expo-file-system'; 
-
-const API_URL = "http://192.168.0.25:3000";
+import { AudioModule } from "expo-audio";
+import { API_URL } from "./config";
+import VoiceRoom from "./VoiceRoom";
 
 type Msg = { role: "user" | "assistant"; content: string };
 type Phrase = { id: number; text: string; meaning: string; example: string };
@@ -132,8 +129,7 @@ export default function App() {
   const [showMyPhrases, setShowMyPhrases] = useState(false);
   const [myPhrases, setMyPhrases] = useState<any[]>([]);
 
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
-  const [recording, setRecording] = useState(false);
+  const [voiceEnded, setVoiceEnded] = useState(0);
 
   // ask for mic permission
   useEffect(() => {
@@ -193,7 +189,17 @@ export default function App() {
     })();
     // set today's phrases
     fetch(`${API_URL}/todays-phrases`).then(r=>r.json()).then(d=>setPhrases(d.phrases??[])).catch(()=>{});
-  }, [appState, userId]);
+  }, [appState, userId, voiceEnded]);
+
+  async function reloadHistory() {
+    if (!userId) return;
+    try {
+      const d = await fetch(`${API_URL}/history?userId=${userId}`).then((r) => r.json());
+      setMessages(d.messages ?? []);
+    } catch {
+      /* ignore */
+    }
+  }
 
   // end session if app goes into background
   useEffect(() => {
@@ -273,68 +279,6 @@ export default function App() {
     setShowMyPhrases(true);
   }
   
-  // function to start recording
-  async function startRecording(){
-    try {
-      // ask for recording permission
-      const { granted } = await AudioModule.requestRecordingPermissionsAsync();
-      if (!granted) {
-        alert("Microphone permission is required.");
-        return;
-      }
-      await recorder.prepareToRecordAsync(); 
-      recorder.record(); 
-      setRecording(true); 
-    } catch (error){
-      console.error(error); 
-    }
-  }
-
-  async function stopAndSend(){
-    setRecording(false); 
-    // stop recording
-    await recorder.stop(); 
-    const uri = recorder.uri;
-    if (!uri){
-      return; 
-    }
-    setLoading(true); 
-    try {
-      // convert local audio file into base64 string
-      const file = new ExpoFile(uri);
-
-      const base64 = await file.base64(); 
-      // send audio file (mp4) to LLM
-      const res = await fetch(`${API_URL}/voice`, {
-        method: "POST", 
-        headers: { "Content-Type": "application/json" }, 
-        body: JSON.stringify({
-          audio: base64, 
-          mimeType: "audio/mp4", 
-          messages, 
-          level,
-          userId,
-        }),
-      }); 
-      // get reply back from LLM
-      const data = await res.json(); 
-      if (data.transcript && data.reply) {
-        const next: Msg[] = [
-          ...messages,
-          { role: "user", content: data.transcript },
-          { role: "assistant", content: data.reply },
-        ];
-        setMessages(next);
-        // AI buddy reply 
-        Speech.speak(data.reply, { language: "en-US", rate: 0.95 });
-      }
-    } catch (error){
-      console.error(error); 
-    } finally{
-      setLoading(false); 
-    }
-  }
-
   // function to log out 
   async function logout(){
     await AsyncStorage.removeItem("userId"); 
@@ -382,6 +326,15 @@ export default function App() {
 
       {loading && <Text style={s.typing}>{buddyName} is typing…</Text>}
 
+      <VoiceRoom
+        userId={userId}
+        buddyName={buddyName}
+        onDisconnected={() => {
+          setVoiceEnded((n) => n + 1);
+          reloadHistory();
+        }}
+      />
+
       <View style={s.actions}>
         <TouchableOpacity style={s.actionBtn} onPress={fetchReview}>
           <Text style={s.actionBtnText}>振り返り 📝</Text>
@@ -401,12 +354,6 @@ export default function App() {
         />
         <Pressable style={s.send} onPress={send}>
           <Text style={s.sendText}>Send</Text>
-        </Pressable>
-        <Pressable
-          style={[s.send, recording && { backgroundColor: "#dc2626" }]}
-          onPress={recording ? stopAndSend : startRecording}
-        >
-          <Text style={s.sendText}>{recording ? "■ Stop" : "🎤"}</Text>
         </Pressable>
       </View>
 
