@@ -1,0 +1,12 @@
+{"sessionId":"38bc55","runId":"pre-instrument","hypothesisId":"A","location":"app/index.ts:before-registerGlobals","message":"DOMException presence check","data":{"domExceptionType":"function"},"timestamp":1780401279827}
+{"sessionId":"38bc55","runId":"pre-instrument","hypothesisId":"A","location":"app/index.ts:after-registerGlobals","message":"registerGlobals succeeded","data":{},"timestamp":1780401279836}
+{"sessionId":"38bc55","runId":"pre-instrument","hypothesisId":"A","location":"app/index.ts:before-registerGlobals","message":"DOMException presence check","data":{"domExceptionType":"function"},"timestamp":1780403555935}
+{"sessionId":"38bc55","runId":"pre-instrument","hypothesisId":"A","location":"app/index.ts:after-registerGlobals","message":"registerGlobals succeeded","data":{},"timestamp":1780403555944}
+{"sessionId":"38bc55","runId":"pre-instrument","hypothesisId":"A","location":"app/index.ts:before-registerGlobals","message":"DOMException presence check","data":{"domExceptionType":"function"},"timestamp":1780406420568}
+{"sessionId":"38bc55","runId":"pre-instrument","hypothesisId":"A","location":"app/index.ts:after-registerGlobals","message":"registerGlobals succeeded","data":{},"timestamp":1780406420578}
+{"sessionId":"38bc55","runId":"pre-instrument","hypothesisId":"A","location":"app/index.ts:before-registerGlobals","message":"DOMException presence check","data":{"domExceptionType":"function"},"timestamp":1780407961232}
+{"sessionId":"38bc55","runId":"pre-instrument","hypothesisId":"A","location":"app/index.ts:after-registerGlobals","message":"registerGlobals succeeded","data":{},"timestamp":1780407961241}
+{"sessionId":"38bc55","runId":"pre-instrument","hypothesisId":"A","location":"app/index.ts:before-registerGlobals","message":"DOMException presence check","data":{"domExceptionType":"function"},"timestamp":1780408649452}
+{"sessionId":"38bc55","runId":"pre-instrument","hypothesisId":"A","location":"app/index.ts:after-registerGlobals","message":"registerGlobals succeeded","data":{},"timestamp":1780408649462}
+{"sessionId":"38bc55","runId":"pre-instrument","hypothesisId":"A","location":"app/index.ts:before-registerGlobals","message":"DOMException presence check","data":{"domExceptionType":"function"},"timestamp":1780408915389}
+{"sessionId":"38bc55","runId":"pre-instrument","hypothesisId":"A","location":"app/index.ts:after-registerGlobals","message":"registerGlobals succeeded","data":{},"timestamp":1780408915398}

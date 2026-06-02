@@ -154,15 +154,16 @@ async def raphael_agent(ctx: JobContext) -> None:
 
     ctx.add_shutdown_callback(log_usage)
 
-    # start the agent session 
+    logger.info("connecting to room %s", ctx.room.name)
+    await ctx.connect()
+    logger.info("connected — starting session for user %s", user_id)
+
     await session.start(
         agent=RaphaelBuddy(instructions),
         room=ctx.room,
         room_options=room_io.RoomOptions(),
     )
-
-    # connect to the LiveKit room
-    await ctx.connect()
+    logger.info("session started for user %s", user_id)
 
 
 if __name__ == "__main__":

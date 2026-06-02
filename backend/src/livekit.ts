@@ -23,7 +23,7 @@ export async function createLiveKitToken(userId: string): Promise<LiveKitTokenPa
 
   const user = await getUser(userId);
   const sessionId = await getOrCreateSession(userId);
-  const roomName = `raphael-${userId}`;
+  const roomName = `raphael-${userId}-${sessionId}`;
 
   const dispatchMetadata = JSON.stringify({
     userId,

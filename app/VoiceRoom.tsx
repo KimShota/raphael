@@ -1,183 +1,127 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   View,
   Text,
   Pressable,
   StyleSheet,
+  Modal,
   ActivityIndicator,
 } from "react-native";
-import {
-  AudioSession,
-  LiveKitRoom,
-  useRoomContext,
-  useVoiceAssistant,
-  BarVisualizer,
-} from "@livekit/react-native";
+import { LiveKitRoom } from "@livekit/react-native";
 import { API_URL } from "./config";
+import CallScreen from "./CallScreen";
+
+type Phrase = { id: number; text: string; meaning: string; example: string };
 
 type VoiceRoomProps = {
   userId: string;
   buddyName: string;
+  phrases: Phrase[];
   onDisconnected: () => void;
-  onTranscript?: (role: "user" | "assistant", text: string) => void;
 };
 
-type ConnectionDetails = {
-  token: string;
-  url: string;
-  roomName: string;
-};
-
-function VoiceSession({
-  buddyName,
-  onLeave,
-}: {
-  buddyName: string;
-  onLeave: () => void;
-}) {
-  const room = useRoomContext();
-  const { state, audioTrack } = useVoiceAssistant();
-
-  useEffect(() => {
-    const start = async () => {
-      await AudioSession.startAudioSession();
-    };
-    start();
-    return () => {
-      AudioSession.stopAudioSession();
-    };
-  }, []);
-
-  const statusLabel =
-    state === "listening"
-      ? "Listening…"
-      : state === "thinking"
-        ? `${buddyName} is thinking…`
-        : state === "speaking"
-          ? `${buddyName} is speaking…`
-          : "Connecting…";
-
-  return (
-    <View style={voiceStyles.session}>
-      <View style={voiceStyles.visualizer}>
-        {audioTrack ? (
-          <BarVisualizer
-            state={state}
-            trackRef={audioTrack}
-            barCount={5}
-            style={voiceStyles.bars}
-          />
-        ) : (
-          <ActivityIndicator size="large" color="#2563eb" />
-        )}
-      </View>
-      <Text style={voiceStyles.status}>{statusLabel}</Text>
-      <Text style={voiceStyles.hint}>Speak naturally — no need to press record.</Text>
-      <Pressable
-        style={voiceStyles.leaveBtn}
-        onPress={() => {
-          room.disconnect();
-          onLeave();
-        }}
-      >
-        <Text style={voiceStyles.leaveText}>End voice chat</Text>
-      </Pressable>
-    </View>
-  );
-}
+type ConnectionDetails = { token: string; url: string; roomName: string };
 
 export default function VoiceRoom({
   userId,
   buddyName,
+  phrases,
   onDisconnected,
 }: VoiceRoomProps) {
   const [details, setDetails] = useState<ConnectionDetails | null>(null);
+  const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [connect, setConnect] = useState(false);
 
-  const fetchToken = useCallback(async () => {
+  const startCall = useCallback(async () => {
     setError(null);
+    setConnecting(true);
     try {
-      const res = await fetch(`${API_URL}/livekit/token?userId=${encodeURIComponent(userId)}`);
+      const res = await fetch(
+        `${API_URL}/livekit/token?userId=${encodeURIComponent(userId)}`
+      );
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error ?? "Failed to get LiveKit token");
-      }
+      if (!res.ok) throw new Error(data.error ?? "Failed to get token");
       setDetails({ token: data.token, url: data.url, roomName: data.roomName });
-      setConnect(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Connection failed");
+    } finally {
+      setConnecting(false);
     }
   }, [userId]);
 
-  if (!details && !error) {
-    return (
-      <View style={voiceStyles.wrap}>
-        <Pressable style={voiceStyles.startBtn} onPress={fetchToken}>
-          <Text style={voiceStyles.startText}>Start voice with {buddyName}</Text>
-        </Pressable>
-      </View>
-    );
+  function handleLeave() {
+    setDetails(null);
+    onDisconnected();
   }
-
-  if (error) {
-    return (
-      <View style={voiceStyles.wrap}>
-        <Text style={voiceStyles.error}>{error}</Text>
-        <Pressable style={voiceStyles.startBtn} onPress={fetchToken}>
-          <Text style={voiceStyles.startText}>Retry</Text>
-        </Pressable>
-      </View>
-    );
-  }
-
-  if (!details) return null;
 
   return (
-    <LiveKitRoom
-      serverUrl={details.url}
-      token={details.token}
-      connect={connect}
-      audio
-      video={false}
-      onDisconnected={() => {
-        setConnect(false);
-        setDetails(null);
-        onDisconnected();
-      }}
-    >
-      <VoiceSession
-        buddyName={buddyName}
-        onLeave={() => {
-          setConnect(false);
-          setDetails(null);
-          onDisconnected();
-        }}
-      />
-    </LiveKitRoom>
+    <>
+      {/* ── Start call button (shown on chat screen) ── */}
+      <View style={vs.wrap}>
+        {error && <Text style={vs.error}>{error}</Text>}
+        <Pressable
+          style={[vs.callBtn, connecting && vs.callBtnDisabled]}
+          onPress={startCall}
+          disabled={connecting}
+        >
+          {connecting ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <>
+              <Text style={vs.callIcon}>🎙️</Text>
+              <Text style={vs.callText}>Start voice with {buddyName}</Text>
+            </>
+          )}
+        </Pressable>
+      </View>
+
+      {/* ── Full-screen call modal ── */}
+      <Modal
+        visible={!!details}
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={handleLeave}
+      >
+        {details && (
+          <LiveKitRoom
+            serverUrl={details.url}
+            token={details.token}
+            connect
+            audio
+            video={false}
+            onDisconnected={handleLeave}
+          >
+            <CallScreen
+              buddyName={buddyName}
+              phrases={phrases}
+              userId={userId}
+              onLeave={handleLeave}
+            />
+          </LiveKitRoom>
+        )}
+      </Modal>
+    </>
   );
 }
 
-const voiceStyles = StyleSheet.create({
-  wrap: { padding: 12, borderTopWidth: 1, borderColor: "#eee" },
-  startBtn: {
-    backgroundColor: "#16a34a",
-    borderRadius: 14,
-    padding: 14,
-    alignItems: "center",
-  },
-  startText: { color: "#fff", fontWeight: "700", fontSize: 15 },
-  error: { color: "#dc2626", marginBottom: 10, fontSize: 13 },
-  session: { padding: 12, alignItems: "center", borderTopWidth: 1, borderColor: "#eee" },
-  visualizer: { height: 80, width: "100%", justifyContent: "center", alignItems: "center" },
-  bars: { width: "80%", height: 60 },
-  status: { fontSize: 15, fontWeight: "600", color: "#374151", marginTop: 8 },
-  hint: { fontSize: 12, color: "#888", marginTop: 4, marginBottom: 12 },
-  leaveBtn: {
-    backgroundColor: "#dc2626",
-    borderRadius: 12,
+const vs = StyleSheet.create({
+  wrap: {
+    paddingHorizontal: 16,
     paddingVertical: 10,
-    paddingHorizontal: 20,
+    borderTopWidth: 1,
+    borderColor: "#eee",
   },
-  leaveText: { color: "#fff", fontWeight: "600" },
+  error: { color: "#dc2626", fontSize: 13, marginBottom: 8, textAlign: "center" },
+  callBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#16a34a",
+    borderRadius: 16,
+    paddingVertical: 14,
+  },
+  callBtnDisabled: { opacity: 0.65 },
+  callIcon: { fontSize: 18 },
+  callText: { color: "#fff", fontWeight: "700", fontSize: 15 },
 });

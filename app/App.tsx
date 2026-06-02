@@ -131,22 +131,11 @@ export default function App() {
 
   const [voiceEnded, setVoiceEnded] = useState(0);
 
-  // ask for mic permission
+  // request mic permission — LiveKit handles the audio session automatically via registerGlobals()
   useEffect(() => {
-    (async () => {
-      // 1. Request Permission
-      const { granted } = await AudioModule.requestRecordingPermissionsAsync();
-      if (!granted) {
-        alert("Microphone permission is required.");
-        return;
-      }
-
-      // 2. Add this line to tell iOS you want to RECORD
-      await AudioModule.setAudioModeAsync({
-        allowsRecording: true,
-        playsInSilentMode: true, // Optional: keeps audio playing when silent switch is on
-      });
-    })();
+    AudioModule.requestRecordingPermissionsAsync().then(({ granted }) => {
+      if (!granted) alert("Microphone permission is required.");
+    });
   }, []);
 
   // check if user is onboarded or not
@@ -329,6 +318,7 @@ export default function App() {
       <VoiceRoom
         userId={userId}
         buddyName={buddyName}
+        phrases={phrases}
         onDisconnected={() => {
           setVoiceEnded((n) => n + 1);
           reloadHistory();

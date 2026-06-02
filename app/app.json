@@ -46,7 +46,8 @@
         {
           "microphonePermission": "Raphael needs the microphone for real-time voice chat with your English buddy."
         }
-      ]
+      ],
+      "expo-asset"
     ]
   }
 }
