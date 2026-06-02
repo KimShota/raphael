@@ -11,9 +11,8 @@ export async function callLLM(system: string, messages: Msg[]): Promise<string>{
         body: JSON.stringify({
             model: process.env.LLM_MODEL, 
             messages: [{ role: "system", content: system }, ...messages], 
-            max_tokens: 180, // Theo speaks in 1-2 short lines
-            temperature: 0.8, // naturally flowing  
-            reasoning_effort: "none",
+            max_tokens: 180,
+            temperature: 0.8,
         }),
     }); 
 
